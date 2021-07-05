@@ -1,5 +1,8 @@
 import math
 import random
+import re
+
+debug = True
 
 COMPONENTS = [
   [
@@ -25,6 +28,7 @@ COMPONENTS = [
     's',
     'st',
     'r',
+    'b',
   ],
   [
     'a',
@@ -53,6 +57,7 @@ COMPONENTS = [
     'zm',
     'mz',
     'm',
+    'g',
     'lm',
     'ng',
     'nk',
@@ -105,6 +110,10 @@ COMPONENTS = [
     'ion',
   ],
 ]
+
+RANKED_CANDIDATES_FILE = "ranked-candidates"
+CANDIDATE_MATCH_COUNTS_FILE = "match-counts"
+CANDIDATE_VICTORY_COUNTS_FILE = "victory-counts"
 
 def generate():
   components = []
@@ -162,10 +171,45 @@ def save_per_candidate_tally(tally, filename):
     for candidate, count in tally.counts.items():
       f.write(f"{candidate} {count}\n")
 
-def save_list(items, filename):
+TALLY_RE = re.compile(r"(?P<candidate>[a-z-]+) (?P<count>[0-9]+)")
+def load_per_candidate_tally(filename):
+  tally = PerCandidateTally()
+  try:
+    with open(filename, "r") as f:
+      for line in f:
+        line = line.strip()
+        if (line == ''):
+          continue
+        candidate, countString = TALLY_RE.fullmatch(line).group("candidate", "count")
+        count = int(countString)
+        tally.counts[candidate] = count
+  except FileNotFoundError:
+    # Not an error, return empty set.
+    if debug: print(f"counts not found: {filename}")
+    pass
+  return tally
+
+def save_candidate_list(items, filename):
   with open(filename, 'w') as f:
     for item in items:
       f.write(f"{item}\n")
+
+CANDIDATE_RE = re.compile(r"(?P<candidate>[a-z-]+)")
+def load_candidate_list(filename):
+  candidates = []
+  try:
+    with open(filename, "r") as f:
+      for line in f:
+        line = line.strip()
+        if (line == ''):
+          continue
+        candidate = CANDIDATE_RE.fullmatch(line).group("candidate")
+        candidates.append(candidate)
+  except FileNotFoundError:
+    # Not an error, generate new list.
+    if debug: print("candidates not found, generating new set.")
+    candidates = [generate() for x in range(POOL_SIZE)]
+  return candidates
 
 def weighted_selection(weighted_candidates):
     total = sum(w for _, w in weighted_candidates)
@@ -219,18 +263,21 @@ class Match:
     self.first = first
     self.second = second
 
-# How often to try to mutate existing candidates vs arbitrarily replacing one.
-REPLACEMENT_RATE = 0.1
+# How often to try to arbitrarily replacing one instead of mutate existing candidates.
+REPLACEMENT_RATE = 0.15
 
 # How many candidates to consider simultaneously.
 POOL_SIZE = 12
 
+# When replacing an item, how many times to mutate it.
+REPLACEMENT_MUTATION_COUNT = 3
+
 # Representation of an ongoing contest to determine the best name.
 class Contest:
   def __init__(self):
-    self.ranked_candidates = [generate() for x in range(POOL_SIZE)]
-    self.candidate_match_counts = PerCandidateTally()
-    self.candidate_victory_counts = PerCandidateTally()
+    self.ranked_candidates = load_candidate_list(RANKED_CANDIDATES_FILE)
+    self.candidate_match_counts = load_per_candidate_tally(CANDIDATE_MATCH_COUNTS_FILE)
+    self.candidate_victory_counts = load_per_candidate_tally(CANDIDATE_VICTORY_COUNTS_FILE)
 
   def perform_match(self, candidate0, candidate1):
     print('1:', candidate_display_name(candidate0))
@@ -254,7 +301,7 @@ class Contest:
 
     return result
 
-  def mutate(self, candidate):
+  def mutated(self, candidate):
     components = candidate.split("-")
     component_to_mutate_index = random.randrange(0, len(components))
 
@@ -273,11 +320,14 @@ class Contest:
       candidate = self.ranked_candidates[i]
       undeated = self.candidate_victory_counts.get(candidate) == self.candidate_match_counts.get(candidate)
       if undeated:
+        if debug: print(f"found recent, undefeated candidate: {candidate}")
         other_candidate = self.ranked_candidates[i - 1]
         result = self.perform_match(candidate, other_candidate)
 
-        # The recent entrant beat the one above it, so swap them.
-        self.swap_candidates(candidate, other_candidate)
+        if result == 1:
+          # The recent entrant beat the one above it, so swap them.
+          if debug: print(f"moving new entrant up")
+          self.swap_candidates(candidate, other_candidate)
         return True
 
     return False
@@ -285,8 +335,10 @@ class Contest:
   def perform_attempted_mutation_match(self):
     base_candidate = ranked_selection(self.ranked_candidates)
     mutated_candidate = self.mutated(base_candidate)
-    result = self.perform_match(base_candidate, mutated_candidate)
+    if debug: print(f"trying to mutate {base_candidate} into {mutated_candidate}")
+    result = self.perform_match(mutated_candidate, base_candidate)
     if result == 1:
+      if debug: print(f"mutation successful")
       self.replace_candidate(base_candidate, mutated_candidate)
 
   def replace_candidate_and_perform_first_match(self):
@@ -294,7 +346,10 @@ class Contest:
     old_candidate = culling_selection(self.ranked_candidates)
 
     # Mutate the candidate and move it to the bottom.
-    new_candidate = self.mutated(old_candidate)
+    new_candidate = old_candidate
+    for i in range(REPLACEMENT_MUTATION_COUNT):
+      new_candidate = self.mutated(new_candidate)
+    if debug: print(f"replacing ({self.ranked_candidates.index(old_candidate)}) {old_candidate} with {new_candidate}")
     self.ranked_candidates.remove(old_candidate)
     bottom_candidate = self.ranked_candidates[len(self.ranked_candidates) - 1]
     self.ranked_candidates.append(new_candidate)
@@ -303,6 +358,7 @@ class Contest:
     result = self.perform_match(new_candidate, bottom_candidate)
     if result == 1:
       # The new candidate beat the previous bottom one, so swap them.
+      if debug: print(f"swapping last two candidates: {new_candidate} & {bottom_candidate}")
       self.swap_candidates(new_candidate, bottom_candidate)
 
   def select_and_perform_match(self):
@@ -317,9 +373,9 @@ class Contest:
 
   def update(self):
     self.select_and_perform_match()
-    save_list(self.ranked_candidates, "ranked-candidates")
-    save_per_candidate_tally(self.candidate_match_counts, "match-counts")
-    save_per_candidate_tally(self.candidate_victory_counts, "victory-counts")
+    save_candidate_list(self.ranked_candidates, RANKED_CANDIDATES_FILE)
+    save_per_candidate_tally(self.candidate_match_counts, CANDIDATE_MATCH_COUNTS_FILE)
+    save_per_candidate_tally(self.candidate_victory_counts, CANDIDATE_VICTORY_COUNTS_FILE)
 
   def swap_candidates(self, candidate1, candidate2):
     l = self.ranked_candidates

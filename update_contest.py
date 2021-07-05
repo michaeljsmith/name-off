@@ -1,158 +1,35 @@
+import itertools
 import math
 import random
 import re
 
 debug = True
 
-COMPONENTS = [
-  [
-    '',
-    'a',
-    'e',
-    'o',
-    'i',
-  ],
-  [
-    't',
-    'tr',
-    'z',
-    'gr',
-    'd',
-    'b',
-    'br',
-    'v',
-    'f',
-    'g',
-    'c',
-    'cr',
-    'chr',
-    'h',
-    'th',
-    'gr',
-    's',
-    'sl',
-    'st',
-    'sn',
-    'r',
-  ],
-  [
-    'a',
-    'u',
-    'ur',
-    'au',
-    'aa',
-    'ae',
-    'ua',
-    'ir',
-    'i',
-    'ie',
-    'ia',
-    'io',
-    'e',
-    'er',
-    'ee',
-    'ea',
-    'ew',
-    'o',
-    'oo',
-    'ow',
-    'ou',
-    'oa',
-    'or',
-  ],
-  [
-    'k',
-    'mb',
-    'l',
-    'll',
-    'ln',
-    'n',
-    'nd',
-    'ndl',
-    'zm',
-    'mz',
-    'm',
-    'g',
-    'lm',
-    'ng',
-    'nk',
-    'nt',
-    'sm',
-    'lt',
-    'ld',
-    'nz',
-    'nts',
-    'ph',
-    'th',
-    'tr',
-    'x',
-    'xx',
-    'z',
-    'v',
-    'zz',
-    'bn',
-    'ng',
-    'd',
-    'pp',
-    'p',
-    'dr',
-    'mr',
-    'c',
-    'cc',
-    'gm',
-    'st',
-    'sp',
-    'ts',
-    'ps',
-    'gg',
-    'ggl',
-  ],
-  [
-    '',
-    'o',
-    'oo',
-    'os',
-    'io',
-    'ia',
-    'or',
-    'a',
-    'ia',
-    'ir',
-    'us',
-    'ius',
-    'e',
-    'im',
-    'et',
-    'oid',
-    'u',
-    'ica',
-    'ago',
-    'y',
-    'ion',
-    'ule',
-    'ula',
-  ],
-]
+# Loaded dynamically.
+global_components = []
 
 RANKED_CANDIDATES_FILE = "ranked-candidates"
 CANDIDATE_MATCH_COUNTS_FILE = "match-counts"
 CANDIDATE_VICTORY_COUNTS_FILE = "victory-counts"
 
+def components_filename(i):
+  return f"components{i}"
+
 def component_ratings_filename(i):
-    return f"component-ratings{i}"
+  return f"component-ratings{i}"
 
 def component_match_counts_filename(i):
-    return f"component-match_counts{i}"
+  return f"component-match_counts{i}"
 
 def combo_ratings_filename(i):
-    return f"combo-ratings{i}"
+  return f"combo-ratings{i}"
 
 def combo_match_counts_filename(i):
-    return f"combo-match_counts{i}"
+  return f"combo-match_counts{i}"
 
 def generate():
   components = []
-  for component in COMPONENTS:
+  for component in global_components:
     i = random.randrange(len(component))
     components.append(component[i])
   print("".join(components))
@@ -337,13 +214,13 @@ class Contest:
     self.candidate_match_counts = load_per_candidate_tally(CANDIDATE_MATCH_COUNTS_FILE)
     self.candidate_victory_counts = load_per_candidate_tally(CANDIDATE_VICTORY_COUNTS_FILE)
     self.component_ratings = (
-      [load_rating_set(component_ratings_filename(i)) for i in range(len(COMPONENTS))])
+      [load_rating_set(component_ratings_filename(i)) for i in range(len(global_components))])
     self.component_match_counts = (
-      [load_per_candidate_tally(component_match_counts_filename(i)) for i in range(len(COMPONENTS))])
+      [load_per_candidate_tally(component_match_counts_filename(i)) for i in range(len(global_components))])
     self.combo_ratings = (
-      [load_rating_set(combo_ratings_filename(i)) for i in range(len(COMPONENTS) - 1)])
+      [load_rating_set(combo_ratings_filename(i)) for i in range(len(global_components) - 1)])
     self.combo_match_counts = (
-      [load_per_candidate_tally(combo_match_counts_filename(i)) for i in range(len(COMPONENTS) - 1)])
+      [load_per_candidate_tally(combo_match_counts_filename(i)) for i in range(len(global_components) - 1)])
 
   def perform_match(self, candidate0, candidate1):
     print('1:', candidate_display_name(candidate0))
@@ -391,7 +268,7 @@ class Contest:
 
     # Consider all the alternative components, apart from the existing one.
     replacement_options = (
-        [c for c in COMPONENTS[component_to_mutate_index]
+        [c for c in global_components[component_to_mutate_index]
             if c != components[component_to_mutate_index]])
 
     # Assign a weight to each option.
@@ -416,7 +293,7 @@ class Contest:
         #print(f"precombo rating({precombo}): {precombo_rating} ({precombo_weight})")
 
       # Blend in the rating for the combo of this component and the next one.
-      if component_to_mutate_index < len(COMPONENTS) - 1:
+      if component_to_mutate_index < len(global_components) - 1:
         combo_index = component_to_mutate_index
         combo = f"{option}-{components[component_to_mutate_index + 1]}"
         combo_rating = self.combo_ratings[combo_index].get(combo)
@@ -516,7 +393,35 @@ class Contest:
       i = self.ranked_candidates.index(old)
       self.ranked_candidates[i] = new
 
+COMPONENT_RE = re.compile(r'"(?P<component>[a-z]*)"')
+def load_component_list(filename):
+  components = []
+  try:
+    with open(filename, "r") as f:
+      for line in f:
+        line = line.strip()
+        if (line == ''):
+          continue
+        component = COMPONENT_RE.fullmatch(line).group("component")
+        components.append(component)
+  except FileNotFoundError:
+    # Not an error.
+    return None
+  return components
+
+def load_components():
+  i = 0
+  for i in itertools.count():
+    component_options = load_component_list(components_filename(i))
+    if component_options == None:
+      break
+    global_components.append(component_options)
+  if len(global_components) == 0:
+    raise 'No component files found'
+
 def main():
+  load_components()
+
   contest = Contest()
   contest.update()
 

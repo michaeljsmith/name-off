@@ -19,30 +19,45 @@ COMPONENTS = [
     'gr',
     'd',
     'b',
+    'br',
     'v',
     'f',
     'g',
     'c',
     'cr',
+    'chr',
+    'h',
+    'th',
     'gr',
     's',
+    'sl',
     'st',
+    'sn',
     'r',
-    'b',
   ],
   [
     'a',
     'u',
     'ur',
+    'au',
+    'aa',
+    'ae',
+    'ua',
     'ir',
     'i',
     'ie',
+    'ia',
+    'io',
     'e',
     'er',
     'ee',
+    'ea',
     'ew',
+    'o',
     'oo',
     'ow',
+    'ou',
+    'oa',
     'or',
   ],
   [
@@ -85,6 +100,12 @@ COMPONENTS = [
     'c',
     'cc',
     'gm',
+    'st',
+    'sp',
+    'ts',
+    'ps',
+    'gg',
+    'ggl',
   ],
   [
     '',
@@ -108,12 +129,26 @@ COMPONENTS = [
     'ago',
     'y',
     'ion',
+    'ule',
+    'ula',
   ],
 ]
 
 RANKED_CANDIDATES_FILE = "ranked-candidates"
 CANDIDATE_MATCH_COUNTS_FILE = "match-counts"
 CANDIDATE_VICTORY_COUNTS_FILE = "victory-counts"
+
+def component_ratings_filename(i):
+    return f"component-ratings{i}"
+
+def component_match_counts_filename(i):
+    return f"component-match_counts{i}"
+
+def combo_ratings_filename(i):
+    return f"combo-ratings{i}"
+
+def combo_match_counts_filename(i):
+    return f"combo-match_counts{i}"
 
 def generate():
   components = []
@@ -125,7 +160,7 @@ def generate():
 
 SPREAD = 400
 INITIAL_RATING = 1000
-K = 40 # Quite high as results should be fairly stable
+K = 150 # Quite high as results should be fairly stable
 
 def win_probability(elo1, elo2):
   return 1.0 / (1.0 + 10 ** ((elo2 - elo1) / SPREAD))
@@ -153,7 +188,25 @@ class RatingSet:
 def save_rating_set(ratings, filename):
   with open(filename, 'w') as f:
     for candidate, rating in ratings.ratings.items():
-      f.write(f"{candidate} {rating}\n")
+      f.write(f'"{candidate}" {rating}\n')
+
+RATING_RE = re.compile(r'"(?P<candidate>[a-z-]*)" (?P<rating>[0-9\.]+)')
+def load_rating_set(filename):
+  ratings = RatingSet()
+  try:
+    with open(filename, "r") as f:
+      for line in f:
+        line = line.strip()
+        if (line == ''):
+          continue
+        candidate, ratingString = RATING_RE.fullmatch(line).group("candidate", "rating")
+        rating = float(ratingString)
+        ratings.ratings[candidate] = rating
+  except FileNotFoundError:
+    # Not an error, return empty set.
+    if debug: print(f"ratings not found: {filename}")
+    pass
+  return ratings
 
 class PerCandidateTally:
   def __init__(self):
@@ -169,9 +222,9 @@ class PerCandidateTally:
 def save_per_candidate_tally(tally, filename):
   with open(filename, 'w') as f:
     for candidate, count in tally.counts.items():
-      f.write(f"{candidate} {count}\n")
+      f.write(f'"{candidate}" {count}\n')
 
-TALLY_RE = re.compile(r"(?P<candidate>[a-z-]+) (?P<count>[0-9]+)")
+TALLY_RE = re.compile(r'"(?P<candidate>[a-z-]*)" (?P<count>[0-9]+)')
 def load_per_candidate_tally(filename):
   tally = PerCandidateTally()
   try:
@@ -223,11 +276,13 @@ def weighted_selection(weighted_candidates):
 
 # Select an item from a list of Elo-rated items, weighting according to win
 # probability.
-def rated_selection(items, ratings):
+def rated_selection(ratings):
   def rating_weight(rating):
     return win_probability(rating, INITIAL_RATING)
 
-  weighted_candidates = [(x, rating_weight(ratings.get(x))) for x in items]
+  weighted_candidates = [(x, rating_weight(ratings[x])) for x in ratings]
+  for k, v in weighted_candidates:
+    print(f"{k}: {v}")
   return weighted_selection(weighted_candidates)
 
 # How likely we are to pick an item rather than consider the following items
@@ -272,12 +327,23 @@ POOL_SIZE = 12
 # When replacing an item, how many times to mutate it.
 REPLACEMENT_MUTATION_COUNT = 3
 
+def combos_for_candidate(candidate):
+    return ['-'.join(x) for x in zip(candidate.split("-")[:-1], candidate.split("-")[1:])]
+
 # Representation of an ongoing contest to determine the best name.
 class Contest:
   def __init__(self):
     self.ranked_candidates = load_candidate_list(RANKED_CANDIDATES_FILE)
     self.candidate_match_counts = load_per_candidate_tally(CANDIDATE_MATCH_COUNTS_FILE)
     self.candidate_victory_counts = load_per_candidate_tally(CANDIDATE_VICTORY_COUNTS_FILE)
+    self.component_ratings = (
+      [load_rating_set(component_ratings_filename(i)) for i in range(len(COMPONENTS))])
+    self.component_match_counts = (
+      [load_per_candidate_tally(component_match_counts_filename(i)) for i in range(len(COMPONENTS))])
+    self.combo_ratings = (
+      [load_rating_set(combo_ratings_filename(i)) for i in range(len(COMPONENTS) - 1)])
+    self.combo_match_counts = (
+      [load_per_candidate_tally(combo_match_counts_filename(i)) for i in range(len(COMPONENTS) - 1)])
 
   def perform_match(self, candidate0, candidate1):
     print('1:', candidate_display_name(candidate0))
@@ -290,10 +356,28 @@ class Contest:
     else:
       raise "Invalid input: '" + selection + "'"
 
-    # Update records
+    # Update records.
     self.candidate_match_counts.increment(candidate0)
     self.candidate_match_counts.increment(candidate1)
     self.candidate_victory_counts.increment(candidate0 if result == 1 else candidate1)
+
+    # Update component ratings.
+    for i, (c0, c1) in enumerate(zip(candidate0.split("-"), candidate1.split("-"))):
+      if c0 == c1:
+        continue
+      self.component_ratings[i].update_with_result(result, c0, c1)
+      self.component_match_counts[i].increment(c0)
+      self.component_match_counts[i].increment(c1)
+
+    # Update combo ratings.
+    combos0 = combos_for_candidate(candidate0)
+    combos1 = combos_for_candidate(candidate1)
+    for i, (c0, c1) in enumerate(zip(combos_for_candidate(candidate0), combos_for_candidate(candidate1))):
+      if c0 == c1:
+        continue
+      self.combo_ratings[i].update_with_result(result, c0, c1)
+      self.combo_match_counts[i].increment(c0)
+      self.combo_match_counts[i].increment(c1)
 
     # Log match entry
     with open("match-log", "a+") as f:
@@ -309,7 +393,44 @@ class Contest:
     replacement_options = (
         [c for c in COMPONENTS[component_to_mutate_index]
             if c != components[component_to_mutate_index]])
-    replacement_component = replacement_options[random.randrange(0, len(replacement_options))]
+
+    # Assign a weight to each option.
+    # This weight is based on a blend of the ratings for the component and the
+    # combos it is a part of.
+    ratings = self.component_ratings[component_to_mutate_index]
+    BASE_WEIGHT = 2
+    def weight_for_option(option):
+      blend_total = ratings.get(option) * BASE_WEIGHT
+      weight_total = BASE_WEIGHT
+
+      #print(f"base rating({option}): {ratings.get(option)} ({weight_total})")
+
+      # Blend in the rating for the combo of the previous component and this one.
+      if component_to_mutate_index > 0:
+        precombo_index = component_to_mutate_index - 1
+        precombo = f"{components[component_to_mutate_index - 1]}-{option}"
+        precombo_rating = self.combo_ratings[precombo_index].get(precombo)
+        precombo_weight = self.combo_match_counts[precombo_index].get(precombo)
+        blend_total += precombo_rating * precombo_weight
+        weight_total += precombo_weight
+        #print(f"precombo rating({precombo}): {precombo_rating} ({precombo_weight})")
+
+      # Blend in the rating for the combo of this component and the next one.
+      if component_to_mutate_index < len(COMPONENTS) - 1:
+        combo_index = component_to_mutate_index
+        combo = f"{option}-{components[component_to_mutate_index + 1]}"
+        combo_rating = self.combo_ratings[combo_index].get(combo)
+        combo_weight = self.combo_match_counts[combo_index].get(combo)
+        blend_total += combo_rating * combo_weight
+        weight_total += combo_weight
+        #print(f"combo rating({combo}): {combo_rating} ({combo_weight})")
+
+      blended_rating = blend_total / weight_total
+      #print(f"blended rating: {blended_rating}")
+      return blended_rating
+
+    replacement_component = rated_selection(
+      dict([(x, weight_for_option(x)) for x in replacement_options]))
     components[component_to_mutate_index] = replacement_component
     return "-".join(components)
 
@@ -376,6 +497,14 @@ class Contest:
     save_candidate_list(self.ranked_candidates, RANKED_CANDIDATES_FILE)
     save_per_candidate_tally(self.candidate_match_counts, CANDIDATE_MATCH_COUNTS_FILE)
     save_per_candidate_tally(self.candidate_victory_counts, CANDIDATE_VICTORY_COUNTS_FILE)
+    for i, r in enumerate(self.component_ratings):
+      save_rating_set(r, component_ratings_filename(i))
+    for i, c in enumerate(self.component_match_counts):
+      save_per_candidate_tally(c, component_match_counts_filename(i))
+    for i, r in enumerate(self.combo_ratings):
+      save_rating_set(r, combo_ratings_filename(i))
+    for i, c in enumerate(self.combo_match_counts):
+      save_per_candidate_tally(c, combo_match_counts_filename(i))
 
   def swap_candidates(self, candidate1, candidate2):
     l = self.ranked_candidates

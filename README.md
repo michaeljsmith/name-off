@@ -16,10 +16,14 @@ $ git clone <url> name-off
 $ mkdir my-naming-contest
 $ cd my-naming-contest
 ```
-3. Repeatedly run the update_contest.py script - the first time it runs it will create a bunch of files.
+3. Copy the component lists from the repository.
+```
+$ cp ../name-off/sample-components/* .
+```
+4. Repeatedly run the update_contest.py script - the first time it runs it will create a bunch of files.
 ```
 $ while true; do python3 ../name-off/update_contest.py; done
 ```
-4. You will be presented with a series of choices on the command line.
-5. To pause the contest, press Ctrl-C. You can resume by re-entering step 3.
-6. You can see the current ranked candidates in the file 'ranked-candidates'.
+5. You will be presented with a series of choices on the command line.
+6. To pause the contest, press Ctrl-C. You can resume by re-entering step 3.
+7. You can see the current ranked candidates in the file 'ranked-candidates'.

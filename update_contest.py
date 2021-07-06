@@ -12,6 +12,23 @@ RANKED_CANDIDATES_FILE = "ranked-candidates"
 CANDIDATE_MATCH_COUNTS_FILE = "match-counts"
 CANDIDATE_VICTORY_COUNTS_FILE = "victory-counts"
 
+# Elo parameters.
+SPREAD = 400
+INITIAL_RATING = 1000
+K = 150 # Quite high as results should be fairly stable
+
+# How often to try to arbitrarily replacing one instead of mutate existing candidates.
+REPLACEMENT_RATE = 0.15
+
+# How many candidates to consider simultaneously.
+POOL_SIZE = 12
+
+# When replacing an item, how many times to mutate it.
+REPLACEMENT_MUTATION_COUNT = 3
+
+# What fraction of candidates are immune to culling.
+CULLING_IMMUNE_FRACTION = 0.5
+
 def components_filename(i):
   return f"components{i}"
 
@@ -34,10 +51,6 @@ def generate():
     components.append(component[i])
   print("".join(components))
   return "-".join(components)
-
-SPREAD = 400
-INITIAL_RATING = 1000
-K = 150 # Quite high as results should be fairly stable
 
 def win_probability(elo1, elo2):
   return 1.0 / (1.0 + 10 ** ((elo2 - elo1) / SPREAD))
@@ -175,7 +188,6 @@ def ranked_selection(ranked_items):
   return weighted_selection(weighted_candidates)
 
 # Select an item from a ranked list, biasing towards the bottom items.
-CULLING_IMMUNE_FRACTION = 0.5
 def culling_selection(ranked_items):
   n = len(ranked_items)
   immune_count = math.floor(CULLING_IMMUNE_FRACTION * n)
@@ -194,15 +206,6 @@ class Match:
   def __init__(self, first, second):
     self.first = first
     self.second = second
-
-# How often to try to arbitrarily replacing one instead of mutate existing candidates.
-REPLACEMENT_RATE = 0.15
-
-# How many candidates to consider simultaneously.
-POOL_SIZE = 12
-
-# When replacing an item, how many times to mutate it.
-REPLACEMENT_MUTATION_COUNT = 3
 
 def combos_for_candidate(candidate):
     return ['-'.join(x) for x in zip(candidate.split("-")[:-1], candidate.split("-")[1:])]

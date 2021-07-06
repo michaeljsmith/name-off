@@ -19,7 +19,7 @@ INITIAL_RATING = 1000
 K = 40 # Quite high as results should be fairly stable
 
 # How likely we are to pick an item rather than consider the following items
-RANKING_BIAS = 0.2
+RANKING_BIAS = 0.15
 
 # How often to re-rank existing candidates instead of trying a new one.
 RERANK_RATE = 0.1
@@ -333,8 +333,11 @@ class Contest:
         return c
 
   def mutated(self, candidate):
+    def component_weight(i):
+      return math.log(len(global_components[i]))
     components = candidate.split("-")
-    component_to_mutate_index = random.randrange(0, len(components))
+    weighted_component_indices = [(i, component_weight(i)) for i in range(len(components))]
+    component_to_mutate_index = weighted_selection(weighted_component_indices)
 
     # Consider all the alternative components, apart from the existing one.
     replacement_options = (
@@ -497,6 +500,9 @@ def load_component_list(filename):
   except FileNotFoundError:
     # Not an error.
     return None
+    
+  if len(components) == 0:
+    raise f'No components in file "{filename}"'
   return components
 
 def load_components():

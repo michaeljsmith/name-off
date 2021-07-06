@@ -15,19 +15,22 @@ CANDIDATE_VICTORY_COUNTS_FILE = "victory-counts"
 # Elo parameters.
 SPREAD = 400
 INITIAL_RATING = 1000
-K = 150 # Quite high as results should be fairly stable
+K = 40 # Quite high as results should be fairly stable
+
+# How likely we are to pick an item rather than consider the following items
+RANKING_BIAS = 0.2
 
 # How often to try to arbitrarily replacing one instead of mutate existing candidates.
 REPLACEMENT_RATE = 0.15
 
 # How many candidates to consider simultaneously.
-POOL_SIZE = 12
+POOL_SIZE = 20
 
 # When replacing an item, how many times to mutate it.
-REPLACEMENT_MUTATION_COUNT = 3
+REPLACEMENT_MUTATION_COUNT = 6
 
 # What fraction of candidates are immune to culling.
-CULLING_IMMUNE_FRACTION = 0.5
+CULLING_IMMUNE_FRACTION = 0.7
 
 def components_filename(i):
   return f"components{i}"
@@ -174,9 +177,6 @@ def rated_selection(ratings):
   for k, v in weighted_candidates:
     print(f"{k}: {v}")
   return weighted_selection(weighted_candidates)
-
-# How likely we are to pick an item rather than consider the following items
-RANKING_BIAS = 0.25
 
 # Select an item from a ranked list, biasing towards the top items.
 def ranked_selection(ranked_items):

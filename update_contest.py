@@ -155,17 +155,6 @@ def weighted_selection(weighted_candidates):
         return candidate
     raise "Shouldn't get here"
 
-# Select an item from a list of Elo-rated items, weighting according to win
-# probability.
-def rated_selection(ratings):
-  def rating_weight(rating):
-    return win_probability(rating, INITIAL_RATING)
-
-  weighted_candidates = [(x, rating_weight(ratings[x])) for x in ratings]
-  for k, v in weighted_candidates:
-    print(f"{k}: {v}")
-  return weighted_selection(weighted_candidates)
-
 # Select an item from a ranked list, biasing towards the top items.
 def ranked_selection(ranked_items):
   def ranked_weight(i):
@@ -188,6 +177,20 @@ def culling_selection(ranked_items):
   weighted_candidates = (
       [(c, ranked_weight(i)) for i, c in enumerate(ranked_items)])
   return weighted_selection(weighted_candidates)
+
+# Select an item from a list of Elo-rated items, weighting according to win
+# probability.
+def rated_selection(ratings):
+  # Sort the candidates by descending rating.
+  sorted_candidates = sorted(list(ratings.items()), key=lambda x: x[1], reverse=True)
+  for i in range(len(sorted_candidates) - 1):
+    candidate, rating,  = sorted_candidates[i]
+    _, next_rating = sorted_candidates[i + 1]
+    # Simulate a match between this candidate and the next.
+    if random.uniform(0, 1) < win_probability(rating, next_rating):
+      return candidate
+
+  return sorted_candidates[-1][0]
 
 # Definition of a match to run.
 class Match:

@@ -286,10 +286,9 @@ class Contest:
 
   def new_generated_candidate(self):
     components = []
-    for component in global_components:
-      i = random.randrange(len(component))
-      components.append(component[i])
-    print("".join(components))
+    for i, options in enumerate(global_components):
+      new_component = self.component_selection(components, i, options)
+      components.append(new_component)
     return "-".join(components)
 
   # Mutate the candidate, possibly rejecting some undesirable options.

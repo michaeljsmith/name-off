@@ -262,6 +262,30 @@ class Contest:
 
     return result
 
+  def candidate_is_acceptable(self, candidate):
+    match_count = self.candidate_match_counts.get(candidate)
+    victory_count = self.candidate_victory_counts.get(candidate)
+
+    if match_count == 0:
+      return True
+
+    if match_count - victory_count < 2:
+      if debug: print(f"Giving {candidate} a second chance")
+      return True
+
+    if float(victory_count) / match_count > 0.9:
+      if debug: print(f"Bringing back successful candidate: {candidate}")
+      return True
+
+    return False
+
+  # Mutate the candidate, possibly rejecting some undesirable options.
+  def acceptably_mutated(self, candidate):
+    while True:
+      c = self.mutated(candidate)
+      if self.candidate_is_acceptable(c):
+        return c
+
   def mutated(self, candidate):
     components = candidate.split("-")
     component_to_mutate_index = random.randrange(0, len(components))
@@ -332,7 +356,7 @@ class Contest:
 
   def perform_attempted_mutation_match(self):
     base_candidate = ranked_selection(self.ranked_candidates)
-    mutated_candidate = self.mutated(base_candidate)
+    mutated_candidate = self.acceptably_mutated(base_candidate)
     if debug: print(f"trying to mutate {base_candidate} into {mutated_candidate}")
     result = self.perform_match(mutated_candidate, base_candidate)
     if result == 1:
@@ -345,8 +369,12 @@ class Contest:
 
     # Mutate the candidate and move it to the bottom.
     new_candidate = old_candidate
-    for i in range(REPLACEMENT_MUTATION_COUNT):
-      new_candidate = self.mutated(new_candidate)
+    while True:
+      for i in range(REPLACEMENT_MUTATION_COUNT):
+        new_candidate = self.mutated(new_candidate)
+      if self.candidate_is_acceptable(new_candidate):
+        break
+
     if debug: print(f"replacing ({self.ranked_candidates.index(old_candidate)}) {old_candidate} with {new_candidate}")
     self.ranked_candidates.remove(old_candidate)
     bottom_candidate = self.ranked_candidates[len(self.ranked_candidates) - 1]

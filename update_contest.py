@@ -263,21 +263,7 @@ class Contest:
     return result
 
   def candidate_is_acceptable(self, candidate):
-    match_count = self.candidate_match_counts.get(candidate)
-    victory_count = self.candidate_victory_counts.get(candidate)
-
-    if match_count == 0:
-      return True
-
-    if match_count - victory_count < 2:
-      if debug: print(f"Giving {candidate} a second chance")
-      return True
-
-    if float(victory_count) / match_count > 0.9:
-      if debug: print(f"Bringing back successful candidate: {candidate}")
-      return True
-
-    return False
+    return self.candidate_match_counts.get(candidate) == 0
 
   def acceptable_new_generated_candidate(self):
     candidate = self.new_generated_candidate()

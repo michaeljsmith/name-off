@@ -29,6 +29,12 @@ POOL_SIZE = 20
 # What fraction of candidates are immune to culling.
 CULLING_IMMUNE_FRACTION = 0.7
 
+# In pool selection, the power of the weight generated from rating.
+RATING_POWER = 1.004
+
+# How often to do a pool selection vs a tournament selection.
+POOL_SELECTION_RATE = 0.2
+
 def components_filename(i):
   return f"components{i}"
 
@@ -178,19 +184,51 @@ def culling_selection(ranked_items):
       [(c, ranked_weight(i)) for i, c in enumerate(ranked_items)])
   return weighted_selection(weighted_candidates)
 
-# Select an item from a list of Elo-rated items, weighting according to win
-# probability.
-def rated_selection(ratings):
+# Weighted selection - odds shared as pool grows.
+def pool_selection(ratings):
+  # return sorted_candidates[-1][0]
+  def weight(rating):
+    return RATING_POWER ** rating
+
+  weighted_candidates = (
+    [(c, weight(r)) for c, r in ratings.items()])
+  total_weight = sum(w for c, w in weighted_candidates)
+  for c, w in weighted_candidates:
+    print(f"{c}: {w / total_weight}")
+  result = weighted_selection(weighted_candidates)
+  print(f"winner: {result}")
+  return result
+
+# Weighted selection - top candidates dominate odds even for large pools.
+def tournament_selection(ratings):
   # Sort the candidates by descending rating.
   sorted_candidates = sorted(list(ratings.items()), key=lambda x: x[1], reverse=True)
   for i in range(len(sorted_candidates) - 1):
     candidate, rating,  = sorted_candidates[i]
-    _, next_rating = sorted_candidates[i + 1]
+    XXX, next_rating = sorted_candidates[i + 1]
     # Simulate a match between this candidate and the next.
-    if random.uniform(0, 1) < win_probability(rating, next_rating):
+    # Flatten the probabilities somewhat; don't focus too much on past winners.
+    win_rate = win_probability(rating, next_rating)
+    print(f"{candidate}({rating}) vs {XXX}({next_rating}), win_rate = {win_rate}")
+    if random.uniform(0, 1) < win_rate:
+      print(f"winner: {candidate}")
       return candidate
+  return sorted_candidates[-1]
+  
+# Select an item from a list of Elo-rated items, weighting according to win
+# probability.
+def rated_selection(ratings):
+  # Mostly we do a tournament selection, which will reliably pick a top seed
+  # regardless of pool size. However sometimes we do an alternative where the
+  # chances are spread across all entrants, to get an occasional off-beat
+  # suggestion.
+  if random.uniform(0, 1) < POOL_SELECTION_RATE:
+    if debug: print("pool selection")
+    return pool_selection(ratings)
+  else:
+    if debug: print("tournament selection")
+    return tournament_selection(ratings)
 
-  return sorted_candidates[-1][0]
 
 # Definition of a match to run.
 class Match:

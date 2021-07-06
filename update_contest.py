@@ -26,9 +26,6 @@ REPLACEMENT_RATE = 0.15
 # How many candidates to consider simultaneously.
 POOL_SIZE = 20
 
-# When replacing an item, how many times to mutate it.
-REPLACEMENT_MUTATION_COUNT = 6
-
 # What fraction of candidates are immune to culling.
 CULLING_IMMUNE_FRACTION = 0.7
 
@@ -46,14 +43,6 @@ def combo_ratings_filename(i):
 
 def combo_match_counts_filename(i):
   return f"combo-match_counts{i}"
-
-def generate():
-  components = []
-  for component in global_components:
-    i = random.randrange(len(component))
-    components.append(component[i])
-  print("".join(components))
-  return "-".join(components)
 
 def win_probability(elo1, elo2):
   return 1.0 / (1.0 + 10 ** ((elo2 - elo1) / SPREAD))
@@ -152,9 +141,8 @@ def load_candidate_list(filename):
         candidate = CANDIDATE_RE.fullmatch(line).group("candidate")
         candidates.append(candidate)
   except FileNotFoundError:
-    # Not an error, generate new list.
-    if debug: print("candidates not found, generating new set.")
-    candidates = [generate() for x in range(POOL_SIZE)]
+    # Not an error.
+    return None
   return candidates
 
 def weighted_selection(weighted_candidates):
@@ -214,6 +202,12 @@ def combos_for_candidate(candidate):
 class Contest:
   def __init__(self):
     self.ranked_candidates = load_candidate_list(RANKED_CANDIDATES_FILE)
+
+    # If no candidates exist, generate some initial ones.
+    if self.ranked_candidates == None:
+      if debug: print("candidates not found, generating new set.")
+      self.ranked_candidates = [self.new_generated_candidate() for x in range(POOL_SIZE)]
+
     self.candidate_match_counts = load_per_candidate_tally(CANDIDATE_MATCH_COUNTS_FILE)
     self.candidate_victory_counts = load_per_candidate_tally(CANDIDATE_VICTORY_COUNTS_FILE)
     self.component_ratings = (
@@ -281,6 +275,14 @@ class Contest:
       return True
 
     return False
+
+  def new_generated_candidate(self):
+    components = []
+    for component in global_components:
+      i = random.randrange(len(component))
+      components.append(component[i])
+    print("".join(components))
+    return "-".join(components)
 
   # Mutate the candidate, possibly rejecting some undesirable options.
   def acceptably_mutated(self, candidate):
@@ -368,8 +370,7 @@ class Contest:
     # Mutate the candidate and move it to the bottom.
     new_candidate = old_candidate
     while True:
-      for i in range(REPLACEMENT_MUTATION_COUNT):
-        new_candidate = self.mutated(new_candidate)
+      new_candidate = self.new_generated_candidate()
       if self.candidate_is_acceptable(new_candidate):
         break
 

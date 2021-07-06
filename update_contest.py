@@ -300,6 +300,11 @@ class Contest:
         [c for c in global_components[component_to_mutate_index]
             if c != components[component_to_mutate_index]])
 
+    replacement_component = self.component_selection(components, component_to_mutate_index, replacement_options)
+    components[component_to_mutate_index] = replacement_component
+    return "-".join(components)
+
+  def component_selection(self, components, component_to_mutate_index, options):
     # Assign a weight to each option.
     # This weight is based on a blend of the ratings for the component and the
     # combos it is a part of.
@@ -319,7 +324,7 @@ class Contest:
         weight_total += precombo_weight
 
       # Blend in the rating for the combo of this component and the next one.
-      if component_to_mutate_index < len(global_components) - 1:
+      if component_to_mutate_index < len(components) - 1:
         combo_index = component_to_mutate_index
         combo = f"{option}-{components[component_to_mutate_index + 1]}"
         combo_rating = self.combo_ratings[combo_index].get(combo)
@@ -331,9 +336,9 @@ class Contest:
       return blended_rating
 
     replacement_component = rated_selection(
-      dict([(x, weight_for_option(x)) for x in replacement_options]))
-    components[component_to_mutate_index] = replacement_component
-    return "-".join(components)
+        dict([(x, weight_for_option(x)) for x in options]))
+      
+    return replacement_component
 
   def maybe_perform_recent_entrant_match(self):
     # Look for an undefeated candidate who is not at the top, and return a

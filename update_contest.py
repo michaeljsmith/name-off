@@ -206,7 +206,7 @@ class Contest:
     # If no candidates exist, generate some initial ones.
     if self.ranked_candidates == None:
       if debug: print("candidates not found, generating new set.")
-      self.ranked_candidates = [self.new_generated_candidate() for x in range(POOL_SIZE)]
+      self.ranked_candidates = [self.acceptable_new_generated_candidate() for x in range(POOL_SIZE)]
 
     self.candidate_match_counts = load_per_candidate_tally(CANDIDATE_MATCH_COUNTS_FILE)
     self.candidate_victory_counts = load_per_candidate_tally(CANDIDATE_VICTORY_COUNTS_FILE)
@@ -275,6 +275,14 @@ class Contest:
       return True
 
     return False
+
+  def acceptable_new_generated_candidate(self):
+    candidate = self.new_generated_candidate()
+    while True:
+      if self.candidate_is_acceptable(candidate):
+        break
+      candidate = self.mutated(candidate)
+    return candidate
 
   def new_generated_candidate(self):
     components = []
@@ -373,11 +381,7 @@ class Contest:
     old_candidate = culling_selection(self.ranked_candidates)
 
     # Mutate the candidate and move it to the bottom.
-    new_candidate = old_candidate
-    while True:
-      new_candidate = self.new_generated_candidate()
-      if self.candidate_is_acceptable(new_candidate):
-        break
+    new_candidate = self.acceptable_new_generated_candidate()
 
     if debug: print(f"replacing ({self.ranked_candidates.index(old_candidate)}) {old_candidate} with {new_candidate}")
     self.ranked_candidates.remove(old_candidate)

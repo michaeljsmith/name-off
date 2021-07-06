@@ -4,6 +4,7 @@ import random
 import re
 
 debug = True
+debug_probabilities = True
 
 # Loaded dynamically.
 global_components = []
@@ -19,6 +20,9 @@ K = 40 # Quite high as results should be fairly stable
 
 # How likely we are to pick an item rather than consider the following items
 RANKING_BIAS = 0.2
+
+# How often to re-rank existing candidates instead of trying a new one.
+RERANK_RATE = 0.1
 
 # How often to try to arbitrarily replacing one instead of mutate existing candidates.
 REPLACEMENT_RATE = 0.15
@@ -197,9 +201,9 @@ def pool_selection(ratings):
     [(c, weight(r)) for c, r in ratings.items()])
   total_weight = sum(w for c, w in weighted_candidates)
   for c, w in weighted_candidates:
-    print(f"{c}: {w / total_weight}")
+    if debug_probabilities: print(f"{c}: {w / total_weight}")
   result = weighted_selection(weighted_candidates)
-  print(f"winner: {result}")
+  if debug_probabilities: print(f"winner: {result}")
   return result
 
 # Weighted selection - top candidates dominate odds even for large pools.
@@ -212,9 +216,9 @@ def tournament_selection(ratings):
     # Simulate a match between this candidate and the next.
     # Flatten the probabilities somewhat; don't focus too much on past winners.
     win_rate = win_probability(rating, next_rating)
-    print(f"{candidate}({rating}) vs {XXX}({next_rating}), win_rate = {win_rate}")
+    if debug_probabilities: print(f"{candidate}({rating}) vs {XXX}({next_rating}), win_rate = {win_rate}")
     if random.uniform(0, 1) < win_rate:
-      print(f"winner: {candidate}")
+      if debug_probabilities: print(f"winner: {candidate}")
       return candidate
   return sorted_candidates[-1]
   
@@ -423,12 +427,34 @@ class Contest:
       if debug: print(f"swapping last two candidates: {new_candidate} & {bottom_candidate}")
       self.swap_candidates(new_candidate, bottom_candidate)
 
+  def perform_rerank_match(self):
+    # Pick a candidate to replace.
+    indices = [i for i, x in enumerate(self.ranked_candidates)]
+    candidate_indices = (
+      [indices.pop(random.randrange(0, len(indices))),
+       indices.pop(random.randrange(0, len(indices)))])
+    candidates = sorted(
+      ((self.ranked_candidates[i], i) for i in candidate_indices), key=lambda x: x[1])
+
+    if debug: print(f"re-ranking {candidates[0][0]} and {candidates[1][0]}")
+    result = self.perform_match(candidates[0][0], candidates[1][0])
+
+    # If the lower-ranked candidate won, move it above the higher-ranked one.
+    if result == 0:
+      if debug: print(f"moving {candidates[1][0]} above {candidates[0][0]}")
+      self.ranked_candidates.pop(candidates[1][1])
+      self.ranked_candidates.insert(candidates[0][1], candidates[1][0])
+
   def select_and_perform_match(self):
     completed = self.maybe_perform_recent_entrant_match()
     if not completed:
+      # Occasionally compare two existing candidates to see if rankings have
+      # changed.
+      if random.uniform(0, 1) < RERANK_RATE:
+        self.perform_rerank_match()
       # Sometimes try to mutate an existing candidate, other times arbitrarily
       # replace one
-      if random.uniform(0, 1) < REPLACEMENT_RATE:
+      elif random.uniform(0, 1) < REPLACEMENT_RATE:
         self.replace_candidate_and_perform_first_match()
       else:
         self.perform_attempted_mutation_match()

@@ -30,10 +30,13 @@ POOL_SIZE = 20
 CULLING_IMMUNE_FRACTION = 0.7
 
 # In pool selection, the power of the weight generated from rating.
-RATING_POWER = 1.004
+RATING_POWER = 1.006
 
 # How often to do a pool selection vs a tournament selection.
-POOL_SELECTION_RATE = 0.2
+POOL_SELECTION_RATE = 0.3
+
+# How much to weight the component vs the combo rating (which is weighted by count).
+BASE_WEIGHT = 6
 
 def components_filename(i):
   return f"components{i}"
@@ -343,7 +346,6 @@ class Contest:
     # This weight is based on a blend of the ratings for the component and the
     # combos it is a part of.
     ratings = self.component_ratings[component_to_mutate_index]
-    BASE_WEIGHT = 2
     def weight_for_option(option):
       blend_total = ratings.get(option) * BASE_WEIGHT
       weight_total = BASE_WEIGHT

@@ -307,8 +307,6 @@ class Contest:
       blend_total = ratings.get(option) * BASE_WEIGHT
       weight_total = BASE_WEIGHT
 
-      #print(f"base rating({option}): {ratings.get(option)} ({weight_total})")
-
       # Blend in the rating for the combo of the previous component and this one.
       if component_to_mutate_index > 0:
         precombo_index = component_to_mutate_index - 1
@@ -317,7 +315,6 @@ class Contest:
         precombo_weight = self.combo_match_counts[precombo_index].get(precombo)
         blend_total += precombo_rating * precombo_weight
         weight_total += precombo_weight
-        #print(f"precombo rating({precombo}): {precombo_rating} ({precombo_weight})")
 
       # Blend in the rating for the combo of this component and the next one.
       if component_to_mutate_index < len(global_components) - 1:
@@ -327,10 +324,8 @@ class Contest:
         combo_weight = self.combo_match_counts[combo_index].get(combo)
         blend_total += combo_rating * combo_weight
         weight_total += combo_weight
-        #print(f"combo rating({combo}): {combo_rating} ({combo_weight})")
 
       blended_rating = blend_total / weight_total
-      #print(f"blended rating: {blended_rating}")
       return blended_rating
 
     replacement_component = rated_selection(
